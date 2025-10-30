@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "CMakeFiles\\pnm_w.dir\\main.cpp.obj",
+            "outputs": [
+                "C:\\Users\\Filip\\CLionProjects\\pnm_w\\cmake-build-debug\\vc140.pdb",
+                "CMakeFiles\\pnm_w.dir\\main.cpp.obj.ddi"
+            ],
+            "requires": []
+        }
+    ]
+}
