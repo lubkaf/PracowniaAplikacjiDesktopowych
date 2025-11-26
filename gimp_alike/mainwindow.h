@@ -2,21 +2,13 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QMenuBar>
-#include <QAction>
-#include <QFileDialog>
-#include <QMessageBox>
 #include <QLabel>
-#include <QPixmap>
+#include <QScrollArea>
 #include <QImage>
-#include "PNMClasses.h"
-
-
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
-QT_END_NAMESPACE
+#include <QAction>
+#include <QColor>
+#include <QInputDialog>
+#include "pnmclasses.h"
 
 class MainWindow : public QMainWindow
 {
@@ -25,15 +17,34 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
 private slots:
+    // File operations
     void openFile();
     void saveFile();
+
+    // Image operations
+    void desaturateImage();
+    void negativeImage();
+    void linearContrast();
+    void logContrast();
+    void gammaContrast();
+    void adjustBrightnessDialog();
+    void adjustSaturation();
+    void contrastDialog();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
-    QLabel *imageLabel;
-    QString currentFormat;
+    void displayImage() const;
+
+    QLabel* imageLabel;
+    QScrollArea* scrollArea;
     QImage currentImage;
 
-    void showImage();
-    Ui::MainWindow *ui;
+    PNMImage* currentPNMImage = nullptr;
+    QString currentFormat;
 };
+
 #endif // MAINWINDOW_H
