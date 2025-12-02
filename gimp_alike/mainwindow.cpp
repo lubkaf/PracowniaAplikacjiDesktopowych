@@ -33,12 +33,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle("PNM Viewer");
     resize(800,600);
+    LUT = generateLUT();
 }
 
 MainWindow::~MainWindow() {
+    deleteLUT(LUT);
     delete currentPNMImage;
 }
-
 // --- File ---
 void MainWindow::openFile() {
     QString fileName = QFileDialog::getOpenFileName(this, "Choose PNM file", "", "PNM Files (*.pbm *.pgm *.ppm)");
@@ -108,7 +109,6 @@ void MainWindow::openFile() {
 
     displayImage();
 }
-
 void MainWindow::saveFile(){
     if(!currentPNMImage){
         QMessageBox::information(this,"Info","No image to save");
@@ -122,7 +122,6 @@ void MainWindow::saveFile(){
     }
     QMessageBox::information(this,"Info","File saved successfully");
 }
-
 // --- Display ---
 void MainWindow::displayImage() const {
     if(!currentImage.isNull()){
@@ -161,79 +160,26 @@ void MainWindow::negativeImage(){
         }
     displayImage();
 }
-
-void MainWindow::linearContrast(){
-    if(currentImage.isNull()) return;
-    int minVal=255,maxVal=0;
-    for(int y=0;y<currentImage.height();++y)
-        for(int x=0;x<currentImage.width();++x){
-            QColor c(currentImage.pixel(x,y));
-            minVal = std::min({minVal,c.red(),c.green(),c.blue()});
-            maxVal = std::max({maxVal,c.red(),c.green(),c.blue()});
-        }
-    for(int y=0;y<currentImage.height();++y)
-        for(int x=0;x<currentImage.width();++x){
-            QColor c(currentImage.pixel(x,y));
-            int r = (c.red()-minVal)*255/(maxVal-minVal);
-            int g = (c.green()-minVal)*255/(maxVal-minVal);
-            int b = (c.blue()-minVal)*255/(maxVal-minVal);
-            currentImage.setPixel(x,y,qRgb(r,g,b));
-        }
-    displayImage();
-}
-
-void MainWindow::logContrast() {
-    if(currentImage.isNull()) return;
-    for(int y=0;y<currentImage.height();++y)
-        for(int x=0;x<currentImage.width();++x){
-            QColor c(currentImage.pixel(x,y));
-            int r = qBound(0,int(255.0*log(1+c.red())/log(256.0)),255);
-            int g = qBound(0,int(255.0*log(1+c.green())/log(256.0)),255);
-            int b = qBound(0,int(255.0*log(1+c.blue())/log(256.0)),255);
-            currentImage.setPixel(x,y,qRgb(r,g,b));
-        }
-    displayImage();
-}
-
-void MainWindow::gammaContrast() {
-    if(currentImage.isNull()) return;
-    double gamma = 2.2;
-    for(int y=0;y<currentImage.height();++y)
-        for(int x=0;x<currentImage.width();++x){
-            QColor c(currentImage.pixel(x,y));
-            int r = qBound(0,int(pow(c.red()/255.0,gamma)*255),255);
-            int g = qBound(0,int(pow(c.green()/255.0,gamma)*255),255);
-            int b = qBound(0,int(pow(c.blue()/255.0,gamma)*255),255);
-            currentImage.setPixel(x,y,qRgb(r,g,b));
-        }
-    displayImage();
-}
-
 void MainWindow::contrastDialog() {
-    if(currentImage.isNull()) return;
-    QStringList options = {"Linear","Log","Gamma"};
-    bool ok;
-    QString choice = QInputDialog::getItem(this,"Contrast","Select contrast type:",options,0,false,&ok);
-    if(!ok) return;
 
-    if(choice=="Linear") linearContrast();
-    else if(choice=="Log") logContrast();
-    else if(choice=="Gamma") gammaContrast();
 }
-
 void MainWindow::adjustBrightnessDialog() {
     if(currentImage.isNull()) return;
 
     bool ok;
-    int value = QInputDialog::getInt(this,"Brightness","Set brightness (-100 to 100):",0,-100,100,1,&ok);
+    int brightnessFactor = QInputDialog::getInt(this,"Brightness","Set brightness (-100 to 100):",0,-100,100,1,&ok);
     if(!ok) return;
-
+    int lutIndex = brightnessFactor + 100;
     for(int y=0;y<currentImage.height();++y)
         for(int x=0;x<currentImage.width();++x){
             QColor c(currentImage.pixel(x,y));
-            int r = qBound(0,c.red()+value,255);
-            int g = qBound(0,c.green()+value,255);
-            int b = qBound(0,c.blue()+value,255);
+            unsigned char r_o = c.red();
+            unsigned char g_o = c.green();
+            unsigned char b_o = c.blue();
+
+            int r = LUT[r_o][lutIndex];
+            int g = LUT[g_o][lutIndex];
+            int b = LUT[b_o][lutIndex];
             currentImage.setPixel(x,y,qRgb(r,g,b));
         }
     displayImage();
@@ -241,14 +187,34 @@ void MainWindow::adjustBrightnessDialog() {
 
 void MainWindow::adjustSaturation() {
     if(currentImage.isNull()) return;
-    for(int y=0;y<currentImage.height();++y)
+
+    bool ok;
+    // Pobierz współczynnik jako procentową zmianę
+    int saturationFactorPercent = QInputDialog::getInt(this,"Saturation", "Set saturation (-100 to 1000):",0,-100,1000,1,&ok);
+    if(!ok) return;
+
+    // Współczynnik skalowania, gdzie 0% = 1.0 (bez zmian), 100% = 2.0 (podwójne nasycenie), -100% = 0.0 (odszaturowanie)
+    // Mapowanie -100..0..100 na 0.0..1.0..2.0
+    float saturationScaleFactor = 1.0f + (static_cast<float>(saturationFactorPercent) / 100.0f);
+
+    for(int y=0;y<currentImage.height();++y) {
         for(int x=0;x<currentImage.width();++x){
             QColor c(currentImage.pixel(x,y));
             float h,s,l;
+
             c.getHslF(&h,&s,&l);
-            s = qBound(0.0f, s*1.2f, 1.0f);
-            c.setHslF(h,s,l);
+
+            // Zastosowanie skalowania do nasycenia
+            float newSaturation = s * saturationScaleFactor;
+
+            // Ograniczenie do zakresu 0.0 do 1.0
+            newSaturation = qBound(0.0f, newSaturation, 1.0f);
+
+            // Ustawienie nowego koloru za pomocą nowej wartości nasycenia
+            c.setHslF(h, newSaturation, l);
+
             currentImage.setPixel(x,y,c.rgb());
         }
+    }
     displayImage();
 }

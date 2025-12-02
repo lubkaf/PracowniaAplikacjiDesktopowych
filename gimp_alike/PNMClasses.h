@@ -3,7 +3,7 @@
 #include<iostream>
 #include<fstream>
 #include<sstream>
-
+#include<vector>
 inline void skipComments(std::istream& file){
     char c;
     file >> std::ws;
