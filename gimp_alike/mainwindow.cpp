@@ -33,11 +33,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle("PNM Viewer");
     resize(800,600);
-    LUT = generateLUT();
+    brightnessLUT = generateBrightnessLUT();
+    contrastLUT = generateContrastLUT();
 }
 
 MainWindow::~MainWindow() {
-    deleteLUT(LUT);
+    deleteLUT(brightnessLUT);
     delete currentPNMImage;
 }
 // --- File ---
@@ -161,7 +162,25 @@ void MainWindow::negativeImage(){
     displayImage();
 }
 void MainWindow::contrastDialog() {
+    if(currentImage.isNull()) return;
 
+    bool ok;
+    int brightnessFactor = QInputDialog::getInt(this,"Contrast","Set contrast (-100 to 100):",0,-100,100,1,&ok);
+    if(!ok) return;
+    int lutIndex = brightnessFactor + 100;
+    for(int y=0;y<currentImage.height();++y)
+        for(int x=0;x<currentImage.width();++x){
+            QColor c(currentImage.pixel(x,y));
+            unsigned char r_o = c.red();
+            unsigned char g_o = c.green();
+            unsigned char b_o = c.blue();
+
+            int r = contrastLUT[r_o][lutIndex];
+            int g = contrastLUT[g_o][lutIndex];
+            int b = contrastLUT[b_o][lutIndex];
+            currentImage.setPixel(x,y,qRgb(r,g,b));
+        }
+    displayImage();
 }
 void MainWindow::adjustBrightnessDialog() {
     if(currentImage.isNull()) return;
@@ -177,9 +196,9 @@ void MainWindow::adjustBrightnessDialog() {
             unsigned char g_o = c.green();
             unsigned char b_o = c.blue();
 
-            int r = LUT[r_o][lutIndex];
-            int g = LUT[g_o][lutIndex];
-            int b = LUT[b_o][lutIndex];
+            int r = brightnessLUT[r_o][lutIndex];
+            int g = brightnessLUT[g_o][lutIndex];
+            int b = brightnessLUT[b_o][lutIndex];
             currentImage.setPixel(x,y,qRgb(r,g,b));
         }
     displayImage();
